@@ -1,0 +1,206 @@
+-- ==========================================
+--               POPE HUB
+-- Universal Aimbot, FOV & ESP Script for Delta
+-- Supports PC (Keybind) & Mobile (On-Screen Button)
+-- ==========================================
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Camera = workspace.CurrentCamera
+local LocalPlayer = Players.LocalPlayer
+
+-- ==========================================
+-- CONFIGURATION (ตั้งค่าการทำงาน)
+-- ==========================================
+local Settings = {
+    AimbotEnabled = true,
+    LockHead = true,          -- ล็อกหัว (ถ้า false จะล็อก HumanoidRootPart)
+    ShowFOV = true,           -- แสดงวง FOV
+    FOVSize = 120,            -- ขนาดของวง FOV (รัศมี)
+    Smoothness = 5,           -- ความลื่นของการล็อก (เลขมากยิ่งลื่น/ช้าลง, 1 คือไวสุด)
+    ESPEnabled = true,        -- มองเห็นตัวละครคนอื่นทั้งเซิร์ฟเวอร์ (Box ESP)
+    AimKey = Enum.KeyCode.E    -- ปุ่มบนคีย์บอร์ดสำหรับล็อกเป้า (เปลี่ยนเป็น KeyCode อื่นได้)
+}
+
+local isAiming = false
+
+-- ==========================================
+-- MOBILE AIM TOGGLE BUTTON (ปุ่มลอยสำหรับมือถือ/PC)
+-- ==========================================
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "PopeHubGui"
+ScreenGui.ResetOnSpawn = false
+
+-- ตรวจสอบ PlayerGui
+local playerGui = LocalPlayer:WaitForChild("PlayerGui")
+if playerGui:FindFirstChild("PopeHubGui") then
+    playerGui.PopeHubGui:Destroy()
+end
+ScreenGui.Parent = playerGui
+
+local ToggleBtn = Instance.new("TextButton")
+ToggleBtn.Name = "AimToggleBtn"
+ToggleBtn.Parent = ScreenGui
+ToggleBtn.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+ToggleBtn.BorderColor3 = Color3.fromRGB(255, 0, 0)
+ToggleBtn.BorderSizePixel = 2
+ToggleBtn.Position = UDim2.new(0.8, 0, 0.4, 0)
+ToggleBtn.Size = UDim2.new(0, 70, 0, 70)
+ToggleBtn.Font = Enum.Font.SourceSansBold
+ToggleBtn.Text = "AIM: OFF"
+ToggleBtn.TextColor3 = Color3.fromRGB(255, 0, 0)
+ToggleBtn.TextSize = 16.0
+ToggleBtn.Active = true
+ToggleBtn.Draggable = true -- สามารถลากเปลี่ยนตำแหน่งปุ่มบนจอได้
+
+-- ระบบการกดปุ่มบนหน้าจอ (สลับ เปิด/ปิด)
+ToggleBtn.MouseButton1Click:Connect(function()
+    isAiming = not isAiming
+    if isAiming then
+        ToggleBtn.Text = "AIM: ON"
+        ToggleBtn.TextColor3 = Color3.fromRGB(0, 255, 0)
+        ToggleBtn.BorderColor3 = Color3.fromRGB(0, 255, 0)
+    else
+        ToggleBtn.Text = "AIM: OFF"
+        ToggleBtn.TextColor3 = Color3.fromRGB(255, 0, 0)
+        ToggleBtn.BorderColor3 = Color3.fromRGB(255, 0, 0)
+    end
+end)
+
+-- ==========================================
+-- CREATE FOV CIRCLE
+-- ==========================================
+local FOVCircle = Drawing.new("Circle")
+FOVCircle.Visible = Settings.ShowFOV
+FOVCircle.Transparency = 0.7
+FOVCircle.Color = Color3.fromRGB(255, 255, 255)
+FOVCircle.Thickness = 1.5
+FOVCircle.Filled = false
+FOVCircle.Radius = Settings.FOVSize
+
+RunService.RenderStepped:Connect(function()
+    FOVCircle.Visible = Settings.ShowFOV
+    FOVCircle.Radius = Settings.FOVSize
+    FOVCircle.Position = UserInputService:GetMouseLocation()
+end)
+
+-- ==========================================
+-- AIMBOT FUNCTION
+-- ==========================================
+local function GetClosestPlayerInFOV()
+    local closestPlayer = nil
+    local shortestDistance = Settings.FOVSize
+    local mousePos = UserInputService:GetMouseLocation()
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("Humanoid") and player.Character.Humanoid.Health > 0 then
+            local targetPart = Settings.LockHead and player.Character:FindFirstChild("Head") or player.Character:FindFirstChild("HumanoidRootPart")
+            
+            if targetPart then
+                local screenPoint, onScreen = Camera:WorldToViewportPoint(targetPart.Position)
+                
+                if onScreen then
+                    local magnitude = (Vector2.new(screenPoint.X, screenPoint.Y) - mousePos).Magnitude
+                    if magnitude < shortestDistance then
+                        shortestDistance = magnitude
+                        closestPlayer = targetPart
+                    end
+                end
+            end
+        end
+    end
+
+    return closestPlayer
+end
+
+-- การรับค่าจากคีย์บอร์ด (กดปุ่มค้างไว้เพื่อล็อกเป้า)
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if not gameProcessed and input.KeyCode == Settings.AimKey then
+        isAiming = true
+        ToggleBtn.Text = "AIM: ON"
+        ToggleBtn.TextColor3 = Color3.fromRGB(0, 255, 0)
+        ToggleBtn.BorderColor3 = Color3.fromRGB(0, 255, 0)
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input, gameProcessed)
+    if not gameProcessed and input.KeyCode == Settings.AimKey then
+        isAiming = false
+        ToggleBtn.Text = "AIM: OFF"
+        ToggleBtn.TextColor3 = Color3.fromRGB(255, 0, 0)
+        ToggleBtn.BorderColor3 = Color3.fromRGB(255, 0, 0)
+    end
+end)
+
+RunService.RenderStepped:Connect(function()
+    if Settings.AimbotEnabled and isAiming then
+        local target = GetClosestPlayerInFOV()
+        if target then
+            Camera.CFrame = Camera.CFrame:Lerp(CFrame.new(Camera.CFrame.Position, target.Position), 1 / Settings.Smoothness)
+        end
+    end
+end)
+
+-- ==========================================
+-- ESP FUNCTION (มองตัวละครคนอื่นทั้งเซิฟเวอร์)
+-- ==========================================
+local espBoxes = {}
+
+local function createESP(player)
+    if player == LocalPlayer then return end
+    
+    local box = Drawing.new("Square")
+    box.Visible = false
+    box.Color = Color3.fromRGB(0, 255, 0)
+    box.Thickness = 1
+    box.Filled = false
+    
+    espBoxes[player] = box
+    
+    local connection
+    connection = RunService.RenderStepped:Connect(function()
+        if not Settings.ESPEnabled or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") or player.Character.Humanoid.Health <= 0 then
+            box.Visible = false
+            return
+        end
+        
+        local rootPart = player.Character.HumanoidRootPart
+        local head = player.Character:FindFirstChild("Head")
+        
+        if rootPart and head then
+            local rootPos, rootOnScreen = Camera:WorldToViewportPoint(rootPart.Position)
+            local headPos, headOnScreen = Camera:WorldToViewportPoint(head.Position + Vector3.new(0, 0.5, 0))
+            local legPos, legOnScreen = Camera:WorldToViewportPoint(rootPart.Position - Vector3.new(0, 3, 0))
+            
+            if rootOnScreen then
+                local height = math.abs(headPos.Y - legPos.Y)
+                local width = height / 2
+                
+                box.Size = Vector2.new(width, height)
+                box.Position = Vector2.new(rootPos.X - width / 2, headPos.Y)
+                box.Visible = true
+            else
+                box.Visible = false
+            end
+        else
+            box.Visible = false
+        end
+    end)
+    
+    player.AncestryChanged:Connect(function(_, parent)
+        if not parent then
+            connection:Disconnect()
+            box:Remove()
+            espBoxes[player] = nil
+        end
+    end)
+end
+
+for _, player in ipairs(Players:GetPlayers()) do
+    createESP(player)
+end
+
+Players.PlayerAdded:Connect(createESP)
+
+print("POPE HUB Loaded Successfully!")
